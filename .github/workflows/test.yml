@@ -1,0 +1,61 @@
+name: Test Action
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  test-pre-generated:
+    name: "Test: pre-generated reports"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy fixtures to expected location
+        run: cp -r test/fixtures/reports reports
+
+      - name: Run action
+        uses: ./
+        with:
+          report-dir: reports
+          output-name: test-results
+
+  test-raw-json:
+    name: "Test: raw JSON formatter"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy raw run fixture
+        run: |
+          mkdir -p .executable-stories
+          cp test/fixtures/raw-run/raw-run.json .executable-stories/raw-run.json
+
+      - name: Run action
+        uses: ./
+        with:
+          report-dir: reports
+          output-name: test-results
+
+  test-missing-files:
+    name: "Test: error on missing files"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run action (should fail)
+        id: action
+        uses: ./
+        continue-on-error: true
+
+      - name: Verify failure
+        run: |
+          if [[ "${{ steps.action.outcome }}" != "failure" ]]; then
+            echo "Expected action to fail when no reports or raw JSON exist"
+            exit 1
+          fi
+          echo "Action correctly failed"
