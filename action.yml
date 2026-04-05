@@ -1,0 +1,146 @@
+name: "Executable Stories Report"
+description: "Surface BDD test stories in pull requests — PR comment with Markdown summary + HTML report artifact"
+author: "Jag Reehal"
+
+branding:
+  icon: "book-open"
+  color: "blue"
+
+inputs:
+  report-dir:
+    description: "Directory containing or receiving generated reports"
+    required: false
+    default: "reports"
+  output-name:
+    description: "Base filename for reports (without extension)"
+    required: false
+    default: "test-results"
+  raw-run:
+    description: "Path to raw run JSON (auto-detected if not set)"
+    required: false
+    default: ".executable-stories/raw-run.json"
+  formatter-version:
+    description: "Version of executable-stories binary to download (latest or semver)"
+    required: false
+    default: "latest"
+  artifact-name:
+    description: "Name for the uploaded GitHub artifact"
+    required: false
+    default: "executable-stories-report"
+  comment-title:
+    description: "Header text for the PR comment"
+    required: false
+    default: "Executable Stories"
+
+outputs:
+  html-report-path:
+    description: "Path to the HTML report file"
+    value: ${{ steps.paths.outputs.html }}
+  markdown-report-path:
+    description: "Path to the Markdown report file"
+    value: ${{ steps.paths.outputs.md }}
+  comment-id:
+    description: "ID of the created or updated PR comment"
+    value: ${{ steps.comment.outputs.comment-id }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Detect and generate reports
+      id: detect
+      shell: bash
+      run: bash "${{ github.action_path }}/scripts/detect-and-format.sh"
+      env:
+        REPORT_DIR: ${{ inputs.report-dir }}
+        OUTPUT_NAME: ${{ inputs.output-name }}
+        RAW_RUN: ${{ inputs.raw-run }}
+        FORMATTER_VERSION: ${{ inputs.formatter-version }}
+        GH_TOKEN: ${{ github.token }}
+
+    - name: Set output paths
+      id: paths
+      shell: bash
+      run: |
+        echo "html=${{ inputs.report-dir }}/${{ inputs.output-name }}.html" >> "$GITHUB_OUTPUT"
+        echo "md=${{ inputs.report-dir }}/${{ inputs.output-name }}.md" >> "$GITHUB_OUTPUT"
+
+    - name: Upload HTML report
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ inputs.report-dir }}/${{ inputs.output-name }}.html
+
+    - name: Post or update PR comment
+      id: comment
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      env:
+        COMMENT_TITLE: ${{ inputs.comment-title }}
+        MD_PATH: ${{ inputs.report-dir }}/${{ inputs.output-name }}.md
+        ARTIFACT_NAME: ${{ inputs.artifact-name }}
+      with:
+        script: |
+          const fs = require('fs');
+          const title = process.env.COMMENT_TITLE;
+          const mdPath = process.env.MD_PATH;
+          const artifactName = process.env.ARTIFACT_NAME;
+
+          // Read markdown content
+          let mdContent = '';
+          try {
+            mdContent = fs.readFileSync(mdPath, 'utf8');
+          } catch (e) {
+            core.warning(`Could not read markdown report at ${mdPath}: ${e.message}`);
+            return;
+          }
+
+          // Truncate if needed (GitHub comment limit ~65536 chars)
+          const MAX_CONTENT = 55000;
+          let truncated = false;
+          if (mdContent.length > MAX_CONTENT) {
+            mdContent = mdContent.substring(0, MAX_CONTENT);
+            truncated = true;
+          }
+
+          // Build comment body
+          const marker = `<!-- executable-stories: ${title} -->`;
+          const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+          let body = `${marker}\n## ${title}\n\n`;
+          body += `<details>\n<summary>View Stories</summary>\n\n`;
+          body += mdContent + '\n';
+          if (truncated) {
+            body += '\n\n> **Report truncated.** Download the full HTML report for complete details.\n';
+          }
+          body += `\n</details>\n\n`;
+          body += `---\n[Download full HTML report](${runUrl}) (artifact: \`${artifactName}\`)\n`;
+
+          // Find existing comment
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+          });
+          const existing = comments.find(c => c.body && c.body.includes(marker));
+
+          let commentId;
+          if (existing) {
+            const { data: updated } = await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: existing.id,
+              body,
+            });
+            commentId = updated.id;
+            core.info(`Updated existing comment ${commentId}`);
+          } else {
+            const { data: created } = await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
+            commentId = created.id;
+            core.info(`Created comment ${commentId}`);
+          }
+
+          core.setOutput('comment-id', commentId);
