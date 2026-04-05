@@ -14,9 +14,9 @@ fi
 if [[ -f "$RAW_RUN" ]]; then
   echo "::notice::Found raw run JSON at ${RAW_RUN}, downloading formatter binary..."
 
-  # Determine platform binary name
-  OS="${RUNNER_OS,,}"       # lowercase: linux, macos, windows
-  ARCH="${RUNNER_ARCH,,}"   # lowercase: x64, arm64
+  # Determine platform binary name (tr for bash 3 compat on macOS)
+  OS=$(echo "$RUNNER_OS" | tr '[:upper:]' '[:lower:]')
+  ARCH=$(echo "$RUNNER_ARCH" | tr '[:upper:]' '[:lower:]')
 
   # Map GitHub runner OS names to binary names
   case "$OS" in
