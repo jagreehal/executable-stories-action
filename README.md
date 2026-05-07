@@ -110,6 +110,33 @@ If you configured your reporter with custom `outputDir` or `outputName`:
           formatter-version: "0.7.3"
 ```
 
+### Render Screenshots Inline in PR Comments (opt-in)
+
+By default, screenshots referenced in your tests are kept in the HTML artifact only — the PR comment shows a `📎 Screenshot (see HTML report)` placeholder. This is because GitHub blocks `data:` URIs in comment markdown.
+
+To make screenshots render inline in the PR comment, opt in:
+
+```yaml
+permissions:
+  pull-requests: write
+  contents: write          # required: action commits images on a dedicated branch
+
+jobs:
+  test:
+    steps:
+      # ...run tests...
+      - uses: jagreehal/executable-stories-action@v1
+        with:
+          host-images: branch
+          # images-branch: executable-stories-images   # optional, this is the default
+```
+
+What this does:
+- Per PR run, screenshots are committed to an orphan branch (`executable-stories-images` by default), under `pr-{number}/{run-id}/`
+- The PR comment is rewritten to use `https://raw.githubusercontent.com/...` URLs so images render inline
+- The branch is created automatically on first use; safe to delete old `pr-*/` directories any time
+- If the branch upload fails (e.g. permission denied), the action falls back to placeholder mode without breaking the comment
+
 ## Inputs
 
 | Input | Default | Description |
@@ -120,6 +147,8 @@ If you configured your reporter with custom `outputDir` or `outputName`:
 | `formatter-version` | `latest` | Version of executable-stories binary (`latest` or semver) |
 | `artifact-name` | `executable-stories-report` | Name for the uploaded GitHub artifact |
 | `comment-title` | `Executable Stories` | Header text for the PR comment |
+| `host-images` | `false` | Set to `branch` to commit screenshots to an orphan branch and render them inline in the PR comment. Requires `contents: write`. |
+| `images-branch` | `executable-stories-images` | Branch used when `host-images: branch`. Created as orphan on first use. |
 
 ## Outputs
 
@@ -136,6 +165,14 @@ The workflow needs `pull-requests: write` to post comments:
 ```yaml
 permissions:
   pull-requests: write
+```
+
+If you opt in to `host-images: branch`, also grant `contents: write` so the action can commit screenshots to the images branch:
+
+```yaml
+permissions:
+  pull-requests: write
+  contents: write
 ```
 
 ## What You See in PRs
