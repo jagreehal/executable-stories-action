@@ -94,11 +94,33 @@ runs:
             return;
           }
 
-          // Truncate if needed (GitHub comment limit ~65536 chars)
+          // Strip inline base64 data URIs from markdown image syntax — GitHub comments
+          // can't render multi-KB images inline, and a single screenshot easily blows
+          // past the comment length limit. Replace with a small placeholder; the full
+          // images remain available in the HTML report artifact.
+          // Matches: ![alt](data:<mime>;base64,<chars>)
+          let strippedImages = 0;
+          mdContent = mdContent.replace(
+            /!\[([^\]]*)\]\(data:[^;)]+;base64,[^)]+\)/g,
+            (_match, alt) => {
+              strippedImages++;
+              const label = alt && alt.trim() ? alt.trim() : 'Screenshot';
+              return `_📎 ${label} (see HTML report)_`;
+            }
+          );
+          if (strippedImages > 0) {
+            core.info(`Stripped ${strippedImages} inline base64 image(s) from PR comment`);
+          }
+
+          // Truncate at a markdown-safe boundary if still over GitHub's comment limit
+          // (~65536 chars). Cut on the last newline before the limit so we never split
+          // a token mid-stream.
           const MAX_CONTENT = 55000;
           let truncated = false;
           if (mdContent.length > MAX_CONTENT) {
-            mdContent = mdContent.substring(0, MAX_CONTENT);
+            const slice = mdContent.substring(0, MAX_CONTENT);
+            const lastNewline = slice.lastIndexOf('\n');
+            mdContent = lastNewline > 0 ? slice.substring(0, lastNewline) : slice;
             truncated = true;
           }
 
