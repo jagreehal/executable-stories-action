@@ -7,6 +7,13 @@ branding:
   color: "blue"
 
 inputs:
+  mode:
+    description: |
+      "report" (default): surface BDD stories as a PR comment + HTML artifact.
+      "review": generate an Evidence Review of the PR's changes — correlate the run to the diff and
+      band changed code as uncovered / weak / strong. Requires a run JSON (see run-json).
+    required: false
+    default: "report"
   report-dir:
     description: "Directory containing or receiving generated reports"
     required: false
@@ -42,6 +49,30 @@ inputs:
     description: "Branch name used when host-images: branch. Created as an orphan branch on first use."
     required: false
     default: "executable-stories-images"
+  run-json:
+    description: "(review mode) Path to the run JSON (raw or canonical) to correlate against the diff. Defaults to raw-run."
+    required: false
+    default: ""
+  base-ref:
+    description: "(review mode) Base ref to diff against. Defaults to the PR base branch (GITHUB_BASE_REF)."
+    required: false
+    default: ""
+  changed-files:
+    description: "(review mode) Optional precomputed changed-files file (JSON or `git diff --name-status` text). If unset, the action computes it from git."
+    required: false
+    default: ""
+  fail-on:
+    description: "(review mode) Opt-in gate: 'uncovered' or 'weak' — fail the check when changed code lacks evidence. Default: off."
+    required: false
+    default: ""
+  min-evidence:
+    description: "(review mode) Opt-in gate: 'weak' | 'moderate' | 'strong' — fail when any claim is below this strength. Default: off."
+    required: false
+    default: ""
+  formatter-binary:
+    description: "Path to a prebuilt executable-stories binary to use instead of downloading from Releases (for dev/testing the review subcommand before release)."
+    required: false
+    default: ""
 
 outputs:
   html-report-path:
@@ -62,10 +93,17 @@ runs:
       shell: bash
       run: bash "${{ github.action_path }}/scripts/detect-and-format.sh"
       env:
+        MODE: ${{ inputs.mode }}
         REPORT_DIR: ${{ inputs.report-dir }}
         OUTPUT_NAME: ${{ inputs.output-name }}
         RAW_RUN: ${{ inputs.raw-run }}
+        RUN_JSON: ${{ inputs.run-json }}
+        BASE_REF: ${{ inputs.base-ref }}
+        CHANGED_FILES: ${{ inputs.changed-files }}
+        FAIL_ON: ${{ inputs.fail-on }}
+        MIN_EVIDENCE: ${{ inputs.min-evidence }}
         FORMATTER_VERSION: ${{ inputs.formatter-version }}
+        FORMATTER_BINARY: ${{ inputs.formatter-binary }}
         GH_TOKEN: ${{ github.token }}
 
     - name: Set output paths
@@ -279,3 +317,10 @@ runs:
           }
 
           core.setOutput('comment-id', commentId);
+
+    - name: Enforce review gate
+      if: always() && steps.detect.outputs.gate-failed == 'true'
+      shell: bash
+      run: |
+        echo "::error::Evidence Review gate failed — changed code lacks sufficient evidence. See the PR comment or the HTML report artifact for the uncovered/weak files."
+        exit 1
