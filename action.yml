@@ -1,5 +1,5 @@
-name: "Executable Stories Report"
-description: "Surface BDD test stories in pull requests — PR comment with Markdown summary + HTML report artifact"
+name: "Executable Stories"
+description: "Surface BDD test stories in pull requests, gate releases against dev baselines, and track deployments across environments"
 author: "Jag Reehal"
 
 branding:
@@ -9,9 +9,13 @@ branding:
 inputs:
   mode:
     description: |
-      "report" (default): surface BDD stories as a PR comment + HTML artifact.
-      "review": generate an Evidence Review of the PR's changes — correlate the run to the diff and
-      band changed code as uncovered / weak / strong. Requires a run JSON (see run-json).
+      Action mode:
+        - "report" (default): surface BDD stories as PR comment + HTML artifact
+        - "review": generate an Evidence Review of the PR's changes — correlate the run to the diff and
+          band changed code as uncovered / weak / strong. Requires a run JSON (see run-json).
+        - "gate-release": verify a release candidate matches the dev test baseline
+        - "deploy": record a deployment to the environment ledger
+        - "portal": build the self-hostable Living-Docs Portal static site (artifact + optional GitHub Pages)
     required: false
     default: "report"
   report-dir:
@@ -49,6 +53,68 @@ inputs:
     description: "Branch name used when host-images: branch. Created as an orphan branch on first use."
     required: false
     default: "executable-stories-images"
+  gate-dev-run:
+    description: "(gate-release) Path to the dev environment test run to use as baseline"
+    required: false
+  gate-fail-on-regression:
+    description: "(gate-release) Fail if scenarios regressed from dev to RC (default: true)"
+    required: false
+    default: "true"
+  gate-fail-on-removal:
+    description: "(gate-release) Fail if scenarios in dev are missing from RC (default: true)"
+    required: false
+    default: "true"
+  gate-fail-on-new:
+    description: "(gate-release) Fail if new scenarios appear in RC not in dev"
+    required: false
+    default: "false"
+  gate-release-policy:
+    description: "(gate-release) Path to release policy JSON with allowed exceptions"
+    required: false
+  deploy-env:
+    description: "(deploy) Environment name to record the deployment against (e.g. dev, staging, production)"
+    required: false
+  deploy-tag:
+    description: "(deploy) Git tag for this deployment (e.g. v1.2.3)"
+    required: false
+  deploy-ledger:
+    description: "(deploy) Path to deployment ledger JSON"
+    required: false
+    default: ".executable-stories/deployments.json"
+  portal-site-dir:
+    description: "(portal) Root of the Astro site to generate the portal into (scaffold with `executable-stories init-astro`)"
+    required: false
+    default: "."
+  portal-baseline:
+    description: "(portal) Path to a previous story-report.json; enables the 'What's changed' page"
+    required: false
+  portal-audience-split:
+    description: "(portal) Group pages by audience into /stories/engineer|stakeholder/ (default true). Set false for flat /stories/<file>/ URLs."
+    required: false
+    default: "true"
+  portal-build:
+    description: "(portal) Run the site build after generating content (default true). Set false to upload prepared content and build elsewhere."
+    required: false
+    default: "true"
+  portal-build-command:
+    description: "(portal) Command run inside portal-site-dir to build the static site"
+    required: false
+    default: "npm run build"
+  portal-dist-dir:
+    description: "(portal) Build output directory, relative to portal-site-dir"
+    required: false
+    default: "dist"
+  portal-publish:
+    description: |
+      (portal) How to publish the built site:
+        - "false" (default): upload as a host-agnostic artifact only (deploy anywhere)
+        - "pages": also deploy to GitHub Pages (needs `pages: write` and `id-token: write` permissions)
+    required: false
+    default: "false"
+  portal-artifact-name:
+    description: "(portal) Name for the uploaded portal site artifact"
+    required: false
+    default: "executable-stories-portal"
   run-json:
     description: "(review mode) Path to the run JSON (raw or canonical) to correlate against the diff. Defaults to raw-run."
     required: false
@@ -70,7 +136,7 @@ inputs:
     required: false
     default: ""
   formatter-binary:
-    description: "Path to a prebuilt executable-stories binary to use instead of downloading from Releases (for dev/testing the review subcommand before release)."
+    description: "Path to a prebuilt executable-stories binary to use instead of downloading from Releases (for dev/testing before release)."
     required: false
     default: ""
 
@@ -84,11 +150,23 @@ outputs:
   comment-id:
     description: "ID of the created or updated PR comment"
     value: ${{ steps.comment.outputs.comment-id }}
+  gate-failed:
+    description: "Whether the release gate failed (true/false)"
+    value: ${{ steps.detect.outputs.gate-failed }}
+  deploy-ledger-path:
+    description: "Path to the deployment ledger written in deploy mode"
+    value: ${{ steps.detect.outputs.deploy-ledger-path }}
+  portal-output-path:
+    description: "Path to the built portal site (portal mode)"
+    value: ${{ steps.detect.outputs.portal-output-path }}
+  portal-url:
+    description: "Published GitHub Pages URL (portal mode with portal-publish: pages)"
+    value: ${{ steps.portal-pages-deploy.outputs.page_url }}
 
 runs:
   using: "composite"
   steps:
-    - name: Detect and generate reports
+    - name: Detect and run
       id: detect
       shell: bash
       run: bash "${{ github.action_path }}/scripts/detect-and-format.sh"
@@ -104,6 +182,20 @@ runs:
         MIN_EVIDENCE: ${{ inputs.min-evidence }}
         FORMATTER_VERSION: ${{ inputs.formatter-version }}
         FORMATTER_BINARY: ${{ inputs.formatter-binary }}
+        GATE_DEV_RUN: ${{ inputs.gate-dev-run }}
+        GATE_FAIL_ON_REGRESSION: ${{ inputs.gate-fail-on-regression }}
+        GATE_FAIL_ON_REMOVAL: ${{ inputs.gate-fail-on-removal }}
+        GATE_FAIL_ON_NEW: ${{ inputs.gate-fail-on-new }}
+        GATE_RELEASE_POLICY: ${{ inputs.gate-release-policy }}
+        DEPLOY_ENV: ${{ inputs.deploy-env }}
+        DEPLOY_TAG: ${{ inputs.deploy-tag }}
+        DEPLOY_LEDGER: ${{ inputs.deploy-ledger }}
+        PORTAL_SITE_DIR: ${{ inputs.portal-site-dir }}
+        PORTAL_BASELINE: ${{ inputs.portal-baseline }}
+        PORTAL_AUDIENCE_SPLIT: ${{ inputs.portal-audience-split }}
+        PORTAL_BUILD: ${{ inputs.portal-build }}
+        PORTAL_BUILD_COMMAND: ${{ inputs.portal-build-command }}
+        PORTAL_DIST_DIR: ${{ inputs.portal-dist-dir }}
         GH_TOKEN: ${{ github.token }}
 
     - name: Set output paths
@@ -114,6 +206,7 @@ runs:
         echo "md=${{ inputs.report-dir }}/${{ inputs.output-name }}.md" >> "$GITHUB_OUTPUT"
 
     - name: Upload HTML report
+      if: inputs.mode == 'report' || inputs.mode == 'review' || inputs.mode == 'gate-release'
       uses: actions/upload-artifact@v4
       with:
         name: ${{ inputs.artifact-name }}
@@ -121,7 +214,7 @@ runs:
 
     - name: Post or update PR comment
       id: comment
-      if: github.event_name == 'pull_request'
+      if: (inputs.mode == 'report' || inputs.mode == 'review' || inputs.mode == 'gate-release') && github.event_name == 'pull_request'
       uses: actions/github-script@v7
       env:
         COMMENT_TITLE: ${{ inputs.comment-title }}
@@ -318,9 +411,40 @@ runs:
 
           core.setOutput('comment-id', commentId);
 
+    - name: Enforce release gate
+      if: inputs.mode == 'gate-release' && steps.detect.outputs.gate-failed == 'true'
+      shell: bash
+      run: |
+        echo "::error::Release gate failed — RC does not match dev baseline."
+        echo "::error::Check the gate-release report artifact for details."
+        exit 1
+
     - name: Enforce review gate
-      if: always() && steps.detect.outputs.gate-failed == 'true'
+      if: always() && inputs.mode == 'review' && steps.detect.outputs.gate-failed == 'true'
       shell: bash
       run: |
         echo "::error::Evidence Review gate failed — changed code lacks sufficient evidence. See the PR comment or the HTML report artifact for the uncovered/weak files."
         exit 1
+
+    # ---- portal mode ----------------------------------------------------------
+    - name: Upload portal site artifact
+      if: inputs.mode == 'portal'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.portal-artifact-name }}
+        path: ${{ steps.detect.outputs.portal-output-path }}
+
+    - name: Configure GitHub Pages
+      if: inputs.mode == 'portal' && inputs.portal-publish == 'pages'
+      uses: actions/configure-pages@v5
+
+    - name: Upload Pages artifact
+      if: inputs.mode == 'portal' && inputs.portal-publish == 'pages'
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: ${{ steps.detect.outputs.portal-output-path }}
+
+    - name: Deploy to GitHub Pages
+      id: portal-pages-deploy
+      if: inputs.mode == 'portal' && inputs.portal-publish == 'pages'
+      uses: actions/deploy-pages@v4
