@@ -367,10 +367,91 @@ Pin the `executable-stories` CLI version that the action downloads (only relevan
             });
 ```
 
+### Gate a release against a dev baseline (`mode: gate-release`)
+
+Fail the build if a release candidate regresses, drops, or (optionally) adds scenarios versus a known-good dev run. The comparison report is uploaded as an artifact and the `gate-failed` output is set.
+
+```yaml
+- uses: jagreehal/executable-stories-action@v1
+  with:
+    mode: gate-release
+    raw-run: .executable-stories/rc-run.json        # the release candidate
+    gate-dev-run: .executable-stories/dev-run.json  # the baseline
+    # gate-fail-on-new: true                          # also fail on unexpected new scenarios
+    # gate-release-policy: .es/release-policy.json    # allow specific exceptions
+```
+
+By default regressions and removals fail the gate; new scenarios do not (`gate-fail-on-new: false`).
+
+### Record a deployment (`mode: deploy`)
+
+Append a deployment to an environment ledger so later runs (and `gate-release`) can reason about what's where.
+
+```yaml
+- uses: jagreehal/executable-stories-action@v1
+  with:
+    mode: deploy
+    deploy-env: production
+    deploy-tag: ${{ github.ref_name }}
+    # deploy-ledger: .executable-stories/deployments.json   # default
+```
+
+Persist the ledger (artifact, cache, or committed file) if later jobs should compare environments. The written path is exposed as `deploy-ledger-path`.
+
+### Living-Docs Portal — self-hostable static site (`mode: portal`)
+
+Turn a test run into a deployable static site that is your team's source of truth: scenarios categorized by audience (engineers = unit/integration, stakeholders = e2e with video/otel), a "What's changed" view, and stable per-scenario deep-links you can paste into Linear or Confluence. Host it anywhere — the action produces a host-agnostic artifact, and can optionally publish to GitHub Pages.
+
+Artifact only (deploy to S3, internal nginx, Netlify, …):
+
+```yaml
+jobs:
+  portal:
+    runs-on: ubuntu-latest
+    steps:
+      # ...run tests, then ensure the Astro site deps are installed...
+      - run: npm ci
+      - uses: jagreehal/executable-stories-action@v1
+        with:
+          mode: portal
+          portal-site-dir: docs-site        # scaffold once: executable-stories init-astro
+          # portal-baseline: prev-story-report.json   # optional → adds the What's-changed page
+      # download the `executable-stories-portal` artifact and deploy it wherever you like
+```
+
+Publish to GitHub Pages:
+
+```yaml
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  portal:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.portal.outputs.portal-url }}
+    steps:
+      - run: npm ci
+      - id: portal
+        uses: jagreehal/executable-stories-action@v1
+        with:
+          mode: portal
+          portal-site-dir: docs-site
+          portal-publish: pages
+```
+
+Notes:
+- `portal-build` (default `true`) runs `npm run build` in `portal-site-dir`; set it `false` to upload prepared content and build elsewhere.
+- For the **What's changed** page, persist the previous run's `public/stories/story-report.json` (artifact/cache) and pass it as `portal-baseline`.
+
 ## Inputs
 
 | Input | Default | Description |
 |---|---|---|
+| `mode` | `report` | `report`, `review`, `gate-release`, `deploy`, or `portal` |
 | `report-dir` | `reports` | Directory containing or receiving generated reports |
 | `output-name` | `test-results` | Base filename for reports (without extension) |
 | `raw-run` | `.executable-stories/raw-run.json` | Path to raw run JSON |
@@ -379,6 +460,28 @@ Pin the `executable-stories` CLI version that the action downloads (only relevan
 | `comment-title` | `Executable Stories` | Header text for the PR comment; also used as the marker that lets the action find and update its own comment on subsequent runs |
 | `host-images` | `false` | Set to `branch` to commit screenshots to an orphan branch and render them inline in the PR comment. Requires `contents: write`. See [Render screenshots inline](#render-screenshots-inline-in-pr-comments-opt-in). |
 | `images-branch` | `executable-stories-images` | Branch used when `host-images: branch`. Created as orphan on first use. |
+| `run-json` | — | (review) Path to the run JSON to correlate against the PR diff. Defaults to `raw-run` |
+| `base-ref` | — | (review) Base ref to diff against. Defaults to the PR base branch |
+| `changed-files` | — | (review) Optional precomputed changed-files file. If unset, computed from git |
+| `fail-on` | — | (review) Opt-in gate: `uncovered` or `weak` — fail when changed code lacks evidence |
+| `min-evidence` | — | (review) Opt-in gate: `weak`, `moderate`, or `strong` — fail when claims are below this strength |
+| `formatter-binary` | — | Path to a prebuilt `executable-stories` binary instead of downloading from Releases |
+| `gate-dev-run` | — | (gate-release) Path to the dev test run used as the baseline |
+| `gate-fail-on-regression` | `true` | (gate-release) Fail if scenarios regressed from dev to the RC |
+| `gate-fail-on-removal` | `true` | (gate-release) Fail if scenarios present in dev are missing from the RC |
+| `gate-fail-on-new` | `false` | (gate-release) Fail if the RC adds scenarios not in dev |
+| `gate-release-policy` | — | (gate-release) Path to a release-policy JSON with allowed exceptions |
+| `deploy-env` | — | (deploy) Environment name to record the deployment against (e.g. `staging`) |
+| `deploy-tag` | — | (deploy) Git tag for this deployment (e.g. `v1.2.3`) |
+| `deploy-ledger` | `.executable-stories/deployments.json` | (deploy) Path to the deployment ledger JSON |
+| `portal-site-dir` | `.` | (portal) Root of the Astro site to generate the portal into |
+| `portal-baseline` | — | (portal) Path to a previous `story-report.json`; enables the What's-changed page |
+| `portal-audience-split` | `true` | (portal) Group pages into `/stories/engineer\|stakeholder/`. Set `false` for flat `/stories/<file>/` URLs |
+| `portal-build` | `true` | (portal) Run the site build after generating content |
+| `portal-build-command` | `npm run build` | (portal) Command run inside `portal-site-dir` to build the site |
+| `portal-dist-dir` | `dist` | (portal) Build output dir, relative to `portal-site-dir` |
+| `portal-publish` | `false` | (portal) `pages` to also deploy to GitHub Pages |
+| `portal-artifact-name` | `executable-stories-portal` | (portal) Name for the uploaded portal artifact |
 
 ## Outputs
 
@@ -387,6 +490,10 @@ Pin the `executable-stories` CLI version that the action downloads (only relevan
 | `html-report-path` | Path to the generated HTML report file |
 | `markdown-report-path` | Path to the generated Markdown report file |
 | `comment-id` | Numeric ID of the PR comment that was created or updated. Empty string when the action runs outside a `pull_request` event. |
+| `gate-failed` | (gate-release, review) `true`/`false` — whether the gate failed |
+| `deploy-ledger-path` | (deploy) Path to the deployment ledger written in deploy mode |
+| `portal-output-path` | (portal) Path to the built portal site |
+| `portal-url` | (portal) Published GitHub Pages URL when `portal-publish: pages` |
 
 ## Permissions
 
