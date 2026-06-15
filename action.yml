@@ -159,6 +159,9 @@ outputs:
   portal-output-path:
     description: "Path to the built portal site (portal mode)"
     value: ${{ steps.detect.outputs.portal-output-path }}
+  portal-story-report-path:
+    description: "Path to the generated public/stories/story-report.json (portal mode)"
+    value: ${{ steps.detect.outputs.portal-story-report-path }}
   portal-url:
     description: "Published GitHub Pages URL (portal mode with portal-publish: pages)"
     value: ${{ steps.portal-pages-deploy.outputs.page_url }}
