@@ -321,6 +321,10 @@ run_portal() {
   "$BINARY_PATH" build-docs "${FLAGS[@]}"
   echo "::endgroup::"
 
+  local STORY_REPORT_PATH="${SITE_DIR%/}/public/stories/story-report.json"
+  echo "portal-story-report-path=${STORY_REPORT_PATH}" >> "$GITHUB_OUTPUT"
+  echo "::notice::Portal ownership model: keep ${SITE_DIR}/src/content/docs/{guides,notes,adr,runbooks,...} in git; treat ${SITE_DIR}/src/content/docs/stories and ${SITE_DIR}/public/stories as generated output."
+
   local DIST_DIR="${SITE_DIR%/}/${PORTAL_DIST_DIR:-dist}"
 
   if [[ "${PORTAL_BUILD:-true}" == "true" ]]; then

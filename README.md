@@ -419,6 +419,11 @@ jobs:
       # download the `executable-stories-portal` artifact and deploy it wherever you like
 ```
 
+Ownership model:
+- Commit the **portal source**: `portal-site-dir`, including `src/content/docs/guides/`, `notes/`, `adr/`, `runbooks/`, and your Astro config/theme customizations.
+- Do **not** treat generated `src/content/docs/stories/` or `public/stories/*` as hand-edited source. `build-docs` regenerates them on every run.
+- The `init-astro` scaffold now ships a `.gitignore` for those generated paths, so git defaults toward tracking the human zone, not the latest test output.
+
 Publish to GitHub Pages:
 
 ```yaml
@@ -446,6 +451,57 @@ jobs:
 Notes:
 - `portal-build` (default `true`) runs `npm run build` in `portal-site-dir`; set it `false` to upload prepared content and build elsewhere.
 - For the **What's changed** page, persist the previous run's `public/stories/story-report.json` (artifact/cache) and pass it as `portal-baseline`.
+- The action exposes the current report as `portal-story-report-path`, so you can save it separately as a lightweight baseline artifact without scraping paths yourself.
+
+Persist the baseline report artifact:
+
+```yaml
+jobs:
+  portal:
+    runs-on: ubuntu-latest
+    steps:
+      - run: npm ci
+      - id: portal
+        uses: jagreehal/executable-stories-action@v1
+        with:
+          mode: portal
+          portal-site-dir: docs-site
+      - uses: actions/upload-artifact@v4
+        with:
+          name: executable-stories-portal-baseline
+          path: ${{ steps.portal.outputs.portal-story-report-path }}
+```
+
+Cache-backed baseline round-trip on the same branch:
+
+```yaml
+jobs:
+  portal:
+    runs-on: ubuntu-latest
+    steps:
+      - run: npm ci
+      - uses: actions/cache/restore@v4
+        id: portal-baseline-restore
+        with:
+          path: .cache/executable-stories/portal-baseline.json
+          key: portal-baseline-${{ github.ref_name }}-${{ github.run_id }}
+          restore-keys: |
+            portal-baseline-${{ github.ref_name }}-
+      - id: portal
+        uses: jagreehal/executable-stories-action@v1
+        with:
+          mode: portal
+          portal-site-dir: docs-site
+          portal-baseline: ${{ steps.portal-baseline-restore.outputs.cache-hit && '.cache/executable-stories/portal-baseline.json' || '' }}
+      - run: |
+          mkdir -p .cache/executable-stories
+          cp "${{ steps.portal.outputs.portal-story-report-path }}" .cache/executable-stories/portal-baseline.json
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: .cache/executable-stories/portal-baseline.json
+          key: portal-baseline-${{ github.ref_name }}-${{ github.run_id }}
+```
 
 ## Inputs
 
@@ -493,6 +549,7 @@ Notes:
 | `gate-failed` | (gate-release, review) `true`/`false` — whether the gate failed |
 | `deploy-ledger-path` | (deploy) Path to the deployment ledger written in deploy mode |
 | `portal-output-path` | (portal) Path to the built portal site |
+| `portal-story-report-path` | (portal) Path to the generated `public/stories/story-report.json` for baseline persistence |
 | `portal-url` | (portal) Published GitHub Pages URL when `portal-publish: pages` |
 
 ## Permissions
