@@ -30,7 +30,7 @@ Works with all supported frameworks — zero configuration for the common case.
 ## Quick start
 
 ```yaml
-- uses: jagreehal/executable-stories-action@v1
+- uses: jagreehal/executable-stories-action@v2
 ```
 
 The action auto-detects your test output. No inputs are required for the default flow.
@@ -92,7 +92,7 @@ jobs:
       - run: pnpm install
       - run: pnpm test
 
-      - uses: jagreehal/executable-stories-action@v1
+      - uses: jagreehal/executable-stories-action@v2
         if: always()  # post the comment even when tests fail
 ```
 
@@ -115,7 +115,7 @@ jobs:
       - run: pnpm install
       - run: pnpm cypress run
 
-      - uses: jagreehal/executable-stories-action@v1
+      - uses: jagreehal/executable-stories-action@v2
         if: always()
 ```
 
@@ -138,7 +138,7 @@ jobs:
       - run: pip install -e ".[test]"
       - run: pytest
 
-      - uses: jagreehal/executable-stories-action@v1
+      - uses: jagreehal/executable-stories-action@v2
         if: always()
 ```
 
@@ -160,7 +160,7 @@ jobs:
           go-version: "1.22"
       - run: go test ./...
 
-      - uses: jagreehal/executable-stories-action@v1
+      - uses: jagreehal/executable-stories-action@v2
         if: always()
 ```
 
@@ -180,7 +180,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo test
 
-      - uses: jagreehal/executable-stories-action@v1
+      - uses: jagreehal/executable-stories-action@v2
         if: always()
 ```
 
@@ -203,7 +203,7 @@ jobs:
           bundler-cache: true
       - run: bundle exec rake test
 
-      - uses: jagreehal/executable-stories-action@v1
+      - uses: jagreehal/executable-stories-action@v2
         if: always()
 ```
 
@@ -226,7 +226,7 @@ jobs:
           java-version: "21"
       - run: ./gradlew test
 
-      - uses: jagreehal/executable-stories-action@v1
+      - uses: jagreehal/executable-stories-action@v2
         if: always()
 ```
 
@@ -248,7 +248,7 @@ jobs:
           dotnet-version: "8.0"
       - run: dotnet test
 
-      - uses: jagreehal/executable-stories-action@v1
+      - uses: jagreehal/executable-stories-action@v2
         if: always()
 ```
 
@@ -261,7 +261,7 @@ Without `if: always()`, the action only runs if the previous step succeeded. For
 ```yaml
       - run: pnpm test
 
-      - uses: jagreehal/executable-stories-action@v1
+      - uses: jagreehal/executable-stories-action@v2
         if: always()
 ```
 
@@ -272,7 +272,7 @@ You can run the action more than once per workflow — for example, separate Vit
 ```yaml
       - run: pnpm test:unit
       - if: always() && hashFiles('docs/evidence/vitest-tests.html') != ''
-        uses: jagreehal/executable-stories-action@v1
+        uses: jagreehal/executable-stories-action@v2
         with:
           report-dir: docs/evidence
           output-name: vitest-tests
@@ -281,7 +281,7 @@ You can run the action more than once per workflow — for example, separate Vit
 
       - run: pnpm test:e2e
       - if: always() && hashFiles('docs/evidence/playwright-tests.html') != ''
-        uses: jagreehal/executable-stories-action@v1
+        uses: jagreehal/executable-stories-action@v2
         with:
           report-dir: docs/evidence
           output-name: playwright-tests
@@ -306,7 +306,7 @@ jobs:
   test:
     steps:
       # ...run tests...
-      - uses: jagreehal/executable-stories-action@v1
+      - uses: jagreehal/executable-stories-action@v2
         with:
           host-images: branch
           # images-branch: executable-stories-images   # optional, this is the default
@@ -326,7 +326,7 @@ What this does:
 If your reporter is configured with custom `outputDir` or `outputName`:
 
 ```yaml
-      - uses: jagreehal/executable-stories-action@v1
+      - uses: jagreehal/executable-stories-action@v2
         with:
           report-dir: docs/stories
           output-name: user-stories
@@ -337,7 +337,7 @@ If your reporter is configured with custom `outputDir` or `outputName`:
 Pin the `executable-stories` CLI version that the action downloads (only relevant for the raw-JSON path used by non-JS adapters):
 
 ```yaml
-      - uses: jagreehal/executable-stories-action@v1
+      - uses: jagreehal/executable-stories-action@v2
         with:
           formatter-version: "0.7.3"
 ```
@@ -346,7 +346,7 @@ Pin the `executable-stories` CLI version that the action downloads (only relevan
 
 ```yaml
       - id: stories
-        uses: jagreehal/executable-stories-action@v1
+        uses: jagreehal/executable-stories-action@v2
 
       - name: Echo report paths
         run: |
@@ -372,7 +372,7 @@ Pin the `executable-stories` CLI version that the action downloads (only relevan
 Fail the build if a release candidate regresses, drops, or (optionally) adds scenarios versus a known-good dev run. The comparison report is uploaded as an artifact and the `gate-failed` output is set.
 
 ```yaml
-- uses: jagreehal/executable-stories-action@v1
+- uses: jagreehal/executable-stories-action@v2
   with:
     mode: gate-release
     raw-run: .executable-stories/rc-run.json        # the release candidate
@@ -388,7 +388,7 @@ By default regressions and removals fail the gate; new scenarios do not (`gate-f
 Append a deployment to an environment ledger so later runs (and `gate-release`) can reason about what's where.
 
 ```yaml
-- uses: jagreehal/executable-stories-action@v1
+- uses: jagreehal/executable-stories-action@v2
   with:
     mode: deploy
     deploy-env: production
@@ -398,116 +398,39 @@ Append a deployment to an environment ledger so later runs (and `gate-release`) 
 
 Persist the ledger (artifact, cache, or committed file) if later jobs should compare environments. The written path is exposed as `deploy-ledger-path`.
 
-### Living-Docs Portal — self-hostable static site (`mode: portal`)
+### Living documentation — a deployable docs site
 
-Turn a test run into a deployable static site that is your team's source of truth: scenarios categorized by audience (engineers = unit/integration, stakeholders = e2e with video/otel), a "What's changed" view, and stable per-scenario deep-links you can paste into Linear or Confluence. Host it anywhere — the action produces a host-agnostic artifact, and can optionally publish to GitHub Pages.
+A living-docs site is no longer a mode of this action. It comes from a committed Astro project, so the site is a normal part of your repo you can theme, extend with hand-written guides, and deploy with any static host.
 
-Artifact only (deploy to S3, internal nginx, Netlify, …):
+Scaffold it once:
+
+```bash
+npx --package executable-stories-formatters executable-stories init-astro docs-site
+```
+
+Commit `docs-site/` and point its `executable-stories.config.mjs` at your run JSON (`reports/raw-run.json` by default). Then build and deploy it from your own workflow — the site reads the run JSON at build time, so each run only needs to refresh that JSON and rebuild:
 
 ```yaml
 jobs:
-  portal:
+  docs:
     runs-on: ubuntu-latest
     steps:
-      # ...run tests, then ensure the Astro site deps are installed...
-      - run: npm ci
-      - uses: jagreehal/executable-stories-action@v1
+      - uses: actions/checkout@v4
+      - run: pnpm install
+      - run: pnpm test                 # writes reports/raw-run.json
+      - run: pnpm --filter docs-site build   # astro build → docs-site/dist
+      - uses: actions/upload-pages-artifact@v3
         with:
-          mode: portal
-          portal-site-dir: docs-site        # scaffold once: executable-stories init-astro
-          # portal-baseline: prev-story-report.json   # optional → adds the What's-changed page
-      # download the `executable-stories-portal` artifact and deploy it wherever you like
+          path: docs-site/dist
 ```
 
-Ownership model:
-- Commit the **portal source**: `portal-site-dir`, including `src/content/docs/guides/`, `notes/`, `adr/`, `runbooks/`, and your Astro config/theme customizations.
-- Do **not** treat generated `src/content/docs/stories/` or `public/stories/*` as hand-edited source. `build-docs` regenerates them on every run.
-- The `init-astro` scaffold now ships a `.gitignore` for those generated paths, so git defaults toward tracking the human zone, not the latest test output.
-
-Publish to GitHub Pages:
-
-```yaml
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-jobs:
-  portal:
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.portal.outputs.portal-url }}
-    steps:
-      - run: npm ci
-      - id: portal
-        uses: jagreehal/executable-stories-action@v1
-        with:
-          mode: portal
-          portal-site-dir: docs-site
-          portal-publish: pages
-```
-
-Notes:
-- `portal-build` (default `true`) runs `npm run build` in `portal-site-dir`; set it `false` to upload prepared content and build elsewhere.
-- For the **What's changed** page, persist the previous run's `public/stories/story-report.json` (artifact/cache) and pass it as `portal-baseline`.
-- The action exposes the current report as `portal-story-report-path`, so you can save it separately as a lightweight baseline artifact without scraping paths yourself.
-
-Persist the baseline report artifact:
-
-```yaml
-jobs:
-  portal:
-    runs-on: ubuntu-latest
-    steps:
-      - run: npm ci
-      - id: portal
-        uses: jagreehal/executable-stories-action@v1
-        with:
-          mode: portal
-          portal-site-dir: docs-site
-      - uses: actions/upload-artifact@v4
-        with:
-          name: executable-stories-portal-baseline
-          path: ${{ steps.portal.outputs.portal-story-report-path }}
-```
-
-Cache-backed baseline round-trip on the same branch:
-
-```yaml
-jobs:
-  portal:
-    runs-on: ubuntu-latest
-    steps:
-      - run: npm ci
-      - uses: actions/cache/restore@v4
-        id: portal-baseline-restore
-        with:
-          path: .cache/executable-stories/portal-baseline.json
-          key: portal-baseline-${{ github.ref_name }}-${{ github.run_id }}
-          restore-keys: |
-            portal-baseline-${{ github.ref_name }}-
-      - id: portal
-        uses: jagreehal/executable-stories-action@v1
-        with:
-          mode: portal
-          portal-site-dir: docs-site
-          portal-baseline: ${{ steps.portal-baseline-restore.outputs.cache-hit && '.cache/executable-stories/portal-baseline.json' || '' }}
-      - run: |
-          mkdir -p .cache/executable-stories
-          cp "${{ steps.portal.outputs.portal-story-report-path }}" .cache/executable-stories/portal-baseline.json
-      - uses: actions/cache/save@v4
-        if: always()
-        with:
-          path: .cache/executable-stories/portal-baseline.json
-          key: portal-baseline-${{ github.ref_name }}-${{ github.run_id }}
-```
+See the [Astro docs-site guide](https://github.com/jagreehal/executable-stories/blob/main/apps/docs-site/src/content/docs/guides/astro-docs-site.md) for theming, audience grouping, and the "What's changed" view.
 
 ## Inputs
 
 | Input | Default | Description |
 |---|---|---|
-| `mode` | `report` | `report`, `review`, `gate-release`, `deploy`, or `portal` |
+| `mode` | `report` | `report`, `review`, `gate-release`, or `deploy` |
 | `report-dir` | `reports` | Directory containing or receiving generated reports |
 | `output-name` | `test-results` | Base filename for reports (without extension) |
 | `raw-run` | `.executable-stories/raw-run.json` | Path to raw run JSON |
@@ -530,14 +453,6 @@ jobs:
 | `deploy-env` | — | (deploy) Environment name to record the deployment against (e.g. `staging`) |
 | `deploy-tag` | — | (deploy) Git tag for this deployment (e.g. `v1.2.3`) |
 | `deploy-ledger` | `.executable-stories/deployments.json` | (deploy) Path to the deployment ledger JSON |
-| `portal-site-dir` | `.` | (portal) Root of the Astro site to generate the portal into |
-| `portal-baseline` | — | (portal) Path to a previous `story-report.json`; enables the What's-changed page |
-| `portal-audience-split` | `true` | (portal) Group pages into `/stories/engineer\|stakeholder/`. Set `false` for flat `/stories/<file>/` URLs |
-| `portal-build` | `true` | (portal) Run the site build after generating content |
-| `portal-build-command` | `npm run build` | (portal) Command run inside `portal-site-dir` to build the site |
-| `portal-dist-dir` | `dist` | (portal) Build output dir, relative to `portal-site-dir` |
-| `portal-publish` | `false` | (portal) `pages` to also deploy to GitHub Pages |
-| `portal-artifact-name` | `executable-stories-portal` | (portal) Name for the uploaded portal artifact |
 
 ## Outputs
 
@@ -548,9 +463,6 @@ jobs:
 | `comment-id` | Numeric ID of the PR comment that was created or updated. Empty string when the action runs outside a `pull_request` event. |
 | `gate-failed` | (gate-release, review) `true`/`false` — whether the gate failed |
 | `deploy-ledger-path` | (deploy) Path to the deployment ledger written in deploy mode |
-| `portal-output-path` | (portal) Path to the built portal site |
-| `portal-story-report-path` | (portal) Path to the generated `public/stories/story-report.json` for baseline persistence |
-| `portal-url` | (portal) Published GitHub Pages URL when `portal-publish: pages` |
 
 ## Permissions
 

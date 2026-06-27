@@ -15,7 +15,10 @@ inputs:
           band changed code as uncovered / weak / strong. Requires a run JSON (see run-json).
         - "gate-release": verify a release candidate matches the dev test baseline
         - "deploy": record a deployment to the environment ledger
-        - "portal": build the self-hostable Living-Docs Portal static site (artifact + optional GitHub Pages)
+
+      For a living-docs site, scaffold once with `executable-stories init-astro` and
+      deploy with `astro build` in your own workflow (see the README). It is no longer
+      a mode of this action.
     required: false
     default: "report"
   report-dir:
@@ -81,40 +84,6 @@ inputs:
     description: "(deploy) Path to deployment ledger JSON"
     required: false
     default: ".executable-stories/deployments.json"
-  portal-site-dir:
-    description: "(portal) Root of the Astro site to generate the portal into (scaffold with `executable-stories init-astro`)"
-    required: false
-    default: "."
-  portal-baseline:
-    description: "(portal) Path to a previous story-report.json; enables the 'What's changed' page"
-    required: false
-  portal-audience-split:
-    description: "(portal) Group pages by audience into /stories/engineer|stakeholder/ (default true). Set false for flat /stories/<file>/ URLs."
-    required: false
-    default: "true"
-  portal-build:
-    description: "(portal) Run the site build after generating content (default true). Set false to upload prepared content and build elsewhere."
-    required: false
-    default: "true"
-  portal-build-command:
-    description: "(portal) Command run inside portal-site-dir to build the static site"
-    required: false
-    default: "npm run build"
-  portal-dist-dir:
-    description: "(portal) Build output directory, relative to portal-site-dir"
-    required: false
-    default: "dist"
-  portal-publish:
-    description: |
-      (portal) How to publish the built site:
-        - "false" (default): upload as a host-agnostic artifact only (deploy anywhere)
-        - "pages": also deploy to GitHub Pages (needs `pages: write` and `id-token: write` permissions)
-    required: false
-    default: "false"
-  portal-artifact-name:
-    description: "(portal) Name for the uploaded portal site artifact"
-    required: false
-    default: "executable-stories-portal"
   run-json:
     description: "(review mode) Path to the run JSON (raw or canonical) to correlate against the diff. Defaults to raw-run."
     required: false
@@ -156,15 +125,6 @@ outputs:
   deploy-ledger-path:
     description: "Path to the deployment ledger written in deploy mode"
     value: ${{ steps.detect.outputs.deploy-ledger-path }}
-  portal-output-path:
-    description: "Path to the built portal site (portal mode)"
-    value: ${{ steps.detect.outputs.portal-output-path }}
-  portal-story-report-path:
-    description: "Path to the generated public/stories/story-report.json (portal mode)"
-    value: ${{ steps.detect.outputs.portal-story-report-path }}
-  portal-url:
-    description: "Published GitHub Pages URL (portal mode with portal-publish: pages)"
-    value: ${{ steps.portal-pages-deploy.outputs.page_url }}
 
 runs:
   using: "composite"
@@ -193,12 +153,6 @@ runs:
         DEPLOY_ENV: ${{ inputs.deploy-env }}
         DEPLOY_TAG: ${{ inputs.deploy-tag }}
         DEPLOY_LEDGER: ${{ inputs.deploy-ledger }}
-        PORTAL_SITE_DIR: ${{ inputs.portal-site-dir }}
-        PORTAL_BASELINE: ${{ inputs.portal-baseline }}
-        PORTAL_AUDIENCE_SPLIT: ${{ inputs.portal-audience-split }}
-        PORTAL_BUILD: ${{ inputs.portal-build }}
-        PORTAL_BUILD_COMMAND: ${{ inputs.portal-build-command }}
-        PORTAL_DIST_DIR: ${{ inputs.portal-dist-dir }}
         GH_TOKEN: ${{ github.token }}
 
     - name: Set output paths
@@ -428,26 +382,3 @@ runs:
       run: |
         echo "::error::Evidence Review gate failed — changed code lacks sufficient evidence. See the PR comment or the HTML report artifact for the uncovered/weak files."
         exit 1
-
-    # ---- portal mode ----------------------------------------------------------
-    - name: Upload portal site artifact
-      if: inputs.mode == 'portal'
-      uses: actions/upload-artifact@v4
-      with:
-        name: ${{ inputs.portal-artifact-name }}
-        path: ${{ steps.detect.outputs.portal-output-path }}
-
-    - name: Configure GitHub Pages
-      if: inputs.mode == 'portal' && inputs.portal-publish == 'pages'
-      uses: actions/configure-pages@v5
-
-    - name: Upload Pages artifact
-      if: inputs.mode == 'portal' && inputs.portal-publish == 'pages'
-      uses: actions/upload-pages-artifact@v3
-      with:
-        path: ${{ steps.detect.outputs.portal-output-path }}
-
-    - name: Deploy to GitHub Pages
-      id: portal-pages-deploy
-      if: inputs.mode == 'portal' && inputs.portal-publish == 'pages'
-      uses: actions/deploy-pages@v4

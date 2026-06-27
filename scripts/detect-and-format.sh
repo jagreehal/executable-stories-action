@@ -275,85 +275,12 @@ run_deploy() {
 }
 
 # ---------------------------------------------------------------------------
-# MODE: portal — build the Living-Docs Portal (self-hostable static site)
-# ---------------------------------------------------------------------------
-# Generates the portal content from a raw run into an Astro site, optionally
-# builds it to a host-agnostic static `dist/`, and exposes the path so the
-# composite action can upload it as an artifact (deploy anywhere) and/or publish
-# it to GitHub Pages.
-run_portal() {
-  if [[ ! -f "$RAW_RUN" ]]; then
-    echo "::error::portal mode requires a raw run JSON. Not found: ${RAW_RUN}"
-    echo "::error::Ensure your test runner wrote .executable-stories/raw-run.json (or set raw-run)."
-    exit 1
-  fi
-
-  local SITE_DIR="${PORTAL_SITE_DIR:-.}"
-  if [[ ! -d "$SITE_DIR" ]]; then
-    echo "::error::portal-site-dir does not exist: ${SITE_DIR}. Scaffold an Astro site first (executable-stories init-astro)."
-    exit 1
-  fi
-
-  resolve_binary
-
-  local FLAGS=("$RAW_RUN" --site-dir "$SITE_DIR")
-  # The portal is the audience-aware surface, so the split is on by default here
-  # (unlike plain `build-docs`, which stays backward-compatible with flat URLs).
-  if [[ "${PORTAL_AUDIENCE_SPLIT:-true}" == "true" ]]; then
-    FLAGS+=(--audience-split)
-  fi
-  if [[ -n "${PORTAL_BASELINE:-}" ]]; then
-    # A baseline that was asked for but is missing is a hard error here too — the
-    # same contract as build-docs. Downgrading it to a warning would let a typo'd
-    # path produce a green run that silently drops the what's-changed page. On the
-    # first run (no prior report yet) simply leave portal-baseline unset, or guard
-    # it in the workflow (e.g. only set it after a successful artifact download).
-    if [[ ! -f "$PORTAL_BASELINE" ]]; then
-      echo "::error::portal-baseline not found: ${PORTAL_BASELINE}"
-      echo "::error::Fix the path, or leave portal-baseline unset on the first run (before any baseline exists)."
-      exit 1
-    fi
-    FLAGS+=(--baseline "$PORTAL_BASELINE")
-    echo "::notice::Computing what's-changed against baseline ${PORTAL_BASELINE}"
-  fi
-
-  echo "::group::Generating portal content into ${SITE_DIR}"
-  "$BINARY_PATH" build-docs "${FLAGS[@]}"
-  echo "::endgroup::"
-
-  local STORY_REPORT_PATH="${SITE_DIR%/}/public/stories/story-report.json"
-  echo "portal-story-report-path=${STORY_REPORT_PATH}" >> "$GITHUB_OUTPUT"
-  echo "::notice::Portal ownership model: keep ${SITE_DIR}/src/content/docs/{guides,notes,adr,runbooks,...} in git; treat ${SITE_DIR}/src/content/docs/stories and ${SITE_DIR}/public/stories as generated output."
-
-  local DIST_DIR="${SITE_DIR%/}/${PORTAL_DIST_DIR:-dist}"
-
-  if [[ "${PORTAL_BUILD:-true}" == "true" ]]; then
-    local BUILD_CMD="${PORTAL_BUILD_COMMAND:-npm run build}"
-    echo "::group::Building static site (${BUILD_CMD}) in ${SITE_DIR}"
-    set +e
-    ( cd "$SITE_DIR" && eval "$BUILD_CMD" )
-    local BUILD_EXIT=$?
-    set -e
-    echo "::endgroup::"
-    if [[ $BUILD_EXIT -ne 0 ]]; then
-      echo "::error::Site build failed (${BUILD_CMD}). Did the job run 'npm ci' in ${SITE_DIR} first?"
-      exit $BUILD_EXIT
-    fi
-    if [[ ! -d "$DIST_DIR" ]]; then
-      echo "::error::Build finished but ${DIST_DIR} not found. Set portal-dist-dir to your build output."
-      exit 1
-    fi
-    echo "portal-output-path=${DIST_DIR}" >> "$GITHUB_OUTPUT"
-    echo "::notice::Portal built → ${DIST_DIR} (host-agnostic static site)"
-  else
-    # No build: hand back the prepared site dir so the consumer builds it elsewhere.
-    echo "portal-output-path=${SITE_DIR}" >> "$GITHUB_OUTPUT"
-    echo "::notice::Portal content generated → ${SITE_DIR} (build skipped; portal-build=false)"
-  fi
-}
-
-# ---------------------------------------------------------------------------
 # Main dispatch
+#
+# Living-docs sites are no longer built here. They come from a committed Astro
+# project: scaffold once with `executable-stories init-astro`, point it at your
+# run JSON, and deploy with `astro build` in your own workflow. See the
+# "Living documentation" section of the README.
 # ---------------------------------------------------------------------------
 case "$MODE" in
   report)
@@ -368,11 +295,9 @@ case "$MODE" in
   deploy)
     run_deploy
     ;;
-  portal)
-    run_portal
-    ;;
   *)
-    echo "::error::Unknown mode: ${MODE}. Supported: report, review, gate-release, deploy, portal"
+    echo "::error::Unknown mode: ${MODE}. Supported: report, review, gate-release, deploy."
+    echo "::error::For a living-docs site, scaffold with 'executable-stories init-astro' and deploy with 'astro build' (see the action README)."
     exit 1
     ;;
 esac
